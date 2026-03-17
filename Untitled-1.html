@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目比例申报系统</title>
+    <link href="https://cdn.staticfile.org/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        html, body {
+            overflow-x: hidden;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            margin-top: 20px;
+            margin-bottom: 40px;
+            width: 100% !important;
+            max-width: 100% !important;
+            padding-left: 12px;
+            padding-right: 12px;
+        }
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        .table {
+            min-width: 1200px;
+            width: 100%;
+            margin-bottom: 0;
+        }
+        th, td {
+            white-space: nowrap !important;
+            vertical-align: middle !important;
+            text-align: center;
+            font-size: 13px;
+            padding: 8px 6px !important;
+        }
+        th {
+            background-color: #e9ecef;
+        }
+        td.wrap-32 {
+            white-space: pre-wrap !important;
+            word-wrap: break-word !important;
+            word-break: break-all !important;
+            max-width: 240px !important;
+            line-height: 1.4 !important;
+        }
+        .wrap-input-32 {
+            white-space: pre-wrap !important;
+            word-wrap: break-word !important;
+            word-break: break-all !important;
+            height: auto !important;
+            min-height: 32px !important;
+            padding: 0.375rem 0.75rem !important;
+            overflow: auto !important;
+        }
+        .auto-calc {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .form-control {
+            font-size: 13px;
+        }
+        .btn {
+            margin-right: 5px;
+            margin-bottom: 8px;
+        }
+        #excelFileInput {
+            display: none;
+        }
+        .modal-lg {
+            max-width: 95%;
+        }
+
+        .pagination-container {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: center !important;
+            margin-top: 20px;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .page-size-wrapper {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: 8px;
+            white-space: nowrap !important;
+        }
+        .page-select {
+            max-width: 100px;
+        }
+        .pagination {
+            margin-bottom: 0 !important;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="d-flex flex-wrap justify-content-between align-items mb-3">
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" onclick="document.getElementById('excelFileInput').click()">导入 Excel</button>
+            <input type="file" id="excelFileInput" accept=".xlsx,.xls">
+            <button class="btn btn-success" onclick="exportExcel()">导出 Excel</button>
+        </div>
+
+        <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
+            <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="全局搜索..." style="width:180px">
+            <select id="ownerFilter" class="form-select form-select-sm" style="width:160px">
+                <option value="">全部项目归属人</option>
+            </select>
+        </div>
+    </div>
+
+    <h2 class="text-center mb-3">项目比例申报系统</h2>
+
+    <div class="table-container">
+        <table class="table table-bordered table-hover align-middle" id="projectTable">
+            <thead>
+                <tr>
+                    <th>序号</th>
+                    <th>销售</th>
+                    <th>合同编号</th>
+                    <th>甲方名称</th>
+                    <th>项目名称</th>
+                    <th>合同额</th>
+                    <th>外采费用</th>
+                    <th>项目税费</th>
+                    <th>预估差旅费</th>
+                    <th>标准产品费</th>
+                    <th>计划人工成本</th>
+                    <th>浮动费用</th>
+                    <th>预估利润</th>
+                    <th>预估利润率</th>
+                    <th>验收报告形式</th>
+                    <th>交付上线周期</th>
+                    <th>项目归属人</th>
+                    <th>项目经理</th>
+                    <th>申报激励比例</th>
+                    <th>审核激励比例</th>
+                    <th>备注</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+    <div class="pagination-container" id="paginationWrapper" style="display:none;">
+        <div class="page-size-wrapper">
+            <span class="small">每页显示</span>
+            <select class="form-select form-select-sm page-select" id="pageSizeSelect">
+                <option value="10" selected>10</option>
+                <option value="15">15</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+            </select>
+            <span class="small">条</span>
+        </div>
+        <nav>
+            <ul class="pagination" id="pagination"></ul>
+        </nav>
+    </div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div class="modal fade" id="projectModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑项目</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="projectForm">
+                    <input type="hidden" id="editIndex">
+                    <div class="row g-3">
+                        <div class="col-md-4 col-6">
+                            <label class="form-label small">销售</label>
+                            <input type="text" class="form-control form-control-sm" id="sale" disabled>
+                        </div>
+                        <div class="col-md-4 col-6">
+                            <label class="form-label small">合同编号</label>
+                            <input type="text" class="form-control form-control-sm" id="contractCode" disabled>
+                        </div>
+                        <div class="col-md-4 col-12">
+                            <label class="form-label small">甲方名称</label>
+                            <input type="text" class="form-control form-control-sm wrap-input-32" id="clientName" disabled>
+                        </div>
+
+                        <div class="col-md-6 col-12">
+                            <label class="form-label small">项目名称</label>
+                            <input type="text" class="form-control form-control-sm wrap-input-32" id="projectName" disabled>
+                        </div>
+                        <div class="col-md-6 col-12">
+                            <label class="form-label small">验收报告形式</label>
+                            <select class="form-select form-select-sm" id="checkForm" required style="background-color: #fff3cd;">
+                                <option value="">请选择</option>
+                                <option value="客户纸质盖章">客户纸质盖章</option>
+                                <option value="客户电子盖章">客户电子盖章</option>
+                                <option value="客户纸质签字">客户纸质签字</option>
+                                <option value="客户电子签字">客户电子签字</option>
+                                <option value="客户邮件确认">客户邮件确认</option>
+                                <option value="其他(说明备注)">其他(说明备注)</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">合同额</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="contractAmount" oninput="autoCalc()" disabled>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">外采费用</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="outCost" oninput="autoCalc()" value="0.00">
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">项目税费</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm auto-calc" id="tax" readonly>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">预估差旅费</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="travelCost" oninput="autoCalc()" value="0.00" required style="background-color: #fff3cd;">
+                        </div>
+
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">标准产品费</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="productCost" oninput="autoCalc()" value="0.00" required readonly onclick="openProductSelectModal()" style="background-color: #fff3cd;">
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">计划人工成本</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="humanCost" oninput="autoCalc()" value="0.00" required readonly onclick="openHumanCostModal()" style="background-color: #fff3cd;">
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">浮动费用</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="floatCost" oninput="autoCalc()" value="0.00">
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">预估利润</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm auto-calc" id="profit" readonly>
+                        </div>
+
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">预估利润率</label>
+                            <input type="text" class="form-control form-control-sm auto-calc" id="profitRate" readonly>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">交付上线周期</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" step="1" min="1" class="form-control" id="deliveryCycleDays" required style="background-color: #fff3cd;" oninput="updateDeliveryCycle()">
+                                <span class="input-group-text">个工作日</span>
+                            </div>
+                            <input type="hidden" id="deliveryCycle">
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">项目归属人</label>
+                            <input type="text" class="form-control form-control-sm" id="owner" disabled>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small">项目经理</label>
+                            <input type="text" class="form-control form-control-sm" id="manager" disabled>
+                        </div>
+
+                        <div class="col-md-4 col-12">
+                            <label class="form-label small">申报激励比例</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" step="0.1" min="0" class="form-control" id="applyRateValue" required style="background-color: #fff3cd;" oninput="updateApplyRate()">
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <input type="hidden" id="applyRate">
+                        </div>
+                        <div class="col-md-4 col-12">
+                            <label class="form-label small">审核激励比例</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" step="0.1" min="0" class="form-control" id="auditRateValue" oninput="updateAuditRate()">
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <input type="hidden" id="auditRate">
+                        </div>
+                        <div class="col-md-4 col-12">
+                            <label class="form-label small">备注</label>
+                            <input type="text" class="form-control form-control-sm" id="remark">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveProject()">保存项目</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.staticfile.org/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<script>
+    let projectList = JSON.parse(localStorage.getItem('projectList')) || [
+        { sale: "张三", contractCode: "HT-2026-0001", clientName: "南京科技有限公司", projectName: "企业管理系统升级", contractAmount: "500000.00", outCost: "120000.00", tax: "30000.00", travelCost: "20000.00", productCost: "80000.00", humanCost: "150000.00", juniorDays: 0, midDays: 0, seniorDays: 0, floatCost: "30000.00", profit: "70000.00", profitRate: "14.00%", checkForm: "正式验收报告", deliveryCycle: "90个工作日", owner: "张三", manager: "李四", applyRate: "8%", auditRate: "7%", remark: "常规项目" },
+        { sale: "李四", contractCode: "HT-2026-0002", clientName: "江苏建设集团", projectName: "智慧工地平台", contractAmount: "320000.00", outCost: "60000.00", tax: "19200.00", travelCost: "15000.00", productCost: "50000.00", humanCost: "120000.00", juniorDays: 0, midDays: 0, seniorDays: 0, floatCost: "20000.00", profit: "35800.00", profitRate: "11.19%", checkForm: "阶段性验收", deliveryCycle: "75个工作日", owner: "李四", manager: "王五", applyRate: "7%", auditRate: "6.5%", remark: "需现场实施" },
+    ];
+
+    let searchKeyword = "";
+    let filterOwner = "";
+    let currentPage = 1;
+    let pageSize = 10;
+
+    window.onload = init;
+    function init() {
+        if (!localStorage.getItem('taxRecalcDone')) {
+            recalcAllTaxes();
+            localStorage.setItem('taxRecalcDone', 'true');
+        }
+        renderTable();
+        renderPagination();
+        initOwnerFilter();
+        bindSearchEvents();
+        document.getElementById('excelFileInput').addEventListener('change', importExcel);
+        document.getElementById('pageSizeSelect').addEventListener('change', changePageSize);
+        
+        // 添加人工成本计算的实时更新
+        const juniorInput = document.getElementById('juniorDays');
+        const midInput = document.getElementById('midDays');
+        const seniorInput = document.getElementById('seniorDays');
+        
+        if (juniorInput) juniorInput.addEventListener('input', updateHumanCostCalc);
+        if (midInput) midInput.addEventListener('input', updateHumanCostCalc);
+        if (seniorInput) seniorInput.addEventListener('input', updateHumanCostCalc);
+    }
+
+    function updateHumanCostCalc() {
+        const junior = parseFloat(document.getElementById('juniorDays').value) || 0;
+        const mid = parseFloat(document.getElementById('midDays').value) || 0;
+        const senior = parseFloat(document.getElementById('seniorDays').value) || 0;
+        const total = junior * 800 + mid * 1000 + senior * 1300;
+        document.getElementById('calcResult').value = total.toFixed(2);
+    }
+
+    function updateDeliveryCycle() {
+        const days = parseInt(document.getElementById('deliveryCycleDays').value) || 0;
+        document.getElementById('deliveryCycle').value = days + '个工作日';
+    }
+
+    function updateApplyRate() {
+        const value = parseFloat(document.getElementById('applyRateValue').value) || 0;
+        document.getElementById('applyRate').value = value + '%';
+    }
+
+    function updateAuditRate() {
+        const value = parseFloat(document.getElementById('auditRateValue').value) || 0;
+        document.getElementById('auditRate').value = value + '%';
+    }
+
+    // 产品数据
+    const products = [
+        { name: "文本机器人", price: 100000.00 },
+        { name: "大模型文本机器人", price: 200000.00 },
+        { name: "在线客服", price: 150000.00 },
+        { name: "在线客服坐席辅助", price: 100000.00 },
+        { name: "电话机器人", price: 200000.00 },
+        { name: "语音坐席辅助", price: 100000.00 },
+        { name: "陪练机器人", price: 100000.00 },
+        { name: "大模型陪练机器人", price: 400000.00 },
+        { name: "智能知识中心-文库", price: 200000.00 },
+        { name: "智能知识中心-百科", price: 200000.00 },
+        { name: "智能知识中心-考试", price: 100000.00 },
+        { name: "智能知识中心-学院", price: 100000.00 },
+        { name: "智能知识中心-积分商城", price: 200000.00 },
+        { name: "智能知识中心-圈子论坛", price: 200000.00 },
+        { name: "智能知识中心-案例", price: 100000.00 },
+        { name: "智能知识中心-视频", price: 100000.00 },
+        { name: "智能知识中心-图库", price: 100000.00 },
+        { name: "智能知识中心-智能搜索", price: 300000.00 },
+        { name: "知识图谱", price: 200000.00 },
+        { name: "知识工程", price: 500000.00 },
+        { name: "数字助手", price: 300000.00 },
+        { name: "AIGC平台", price: 500000.00 },
+        { name: "Knova智能体", price: 200000.00 },
+        { name: "智能质检", price: 100000.00 },
+        { name: "其他", price: 0.00 }
+    ];
+
+    function openProductSelectModal() {
+        // 生成产品选择列表
+        const productList = document.getElementById('productList');
+        productList.innerHTML = '';
+        
+        // 创建两列布局
+        const row = document.createElement('div');
+        row.className = 'row';
+        
+        products.forEach((product, index) => {
+            const col = document.createElement('div');
+            col.className = 'col-6';
+            
+            const div = document.createElement('div');
+            div.className = 'form-check';
+            
+            // 为其他选项添加特殊处理
+            if (product.name === "其他") {
+                div.innerHTML = `
+                    <input class="form-check-input" type="checkbox" id="product_${index}" value="${index}" onchange="toggleOtherProduct(this); updateProductTotal()">
+                    <label class="form-check-label small d-flex justify-content-between w-100" for="product_${index}">
+                        <span>${product.name}</span>
+                        <span>¥${product.price.toFixed(2)}</span>
+                    </label>
+                `;
+            } else {
+                div.innerHTML = `
+                    <input class="form-check-input" type="checkbox" id="product_${index}" value="${index}" onchange="updateProductTotal()">
+                    <label class="form-check-label small d-flex justify-content-between w-100" for="product_${index}">
+                        <span>${product.name}</span>
+                        <span>¥${product.price.toFixed(2)}</span>
+                    </label>
+                `;
+            }
+            
+            col.appendChild(div);
+            row.appendChild(col);
+        });
+        
+        productList.appendChild(row);
+        
+        // 显示弹窗
+        new bootstrap.Modal(document.getElementById('productSelectModal')).show();
+    }
+
+    function toggleOtherProduct(checkbox) {
+        const otherSection = document.getElementById('otherProductSection');
+        otherSection.style.display = checkbox.checked ? 'block' : 'none';
+        // 清空其他产品的输入
+        if (!checkbox.checked) {
+            document.getElementById('otherProductName').value = '';
+            document.getElementById('otherProductPrice').value = '';
+        }
+    }
+
+    function updateProductTotal() {
+        let total = 0;
+        
+        // 计算选中的标准产品价格
+        products.forEach((product, index) => {
+            const checkbox = document.getElementById(`product_${index}`);
+            if (checkbox && checkbox.checked) {
+                total += product.price;
+            }
+        });
+        
+        // 计算其他产品价格
+        const otherCheckbox = document.getElementById('product_24'); // 其他选项的索引
+        if (otherCheckbox && otherCheckbox.checked) {
+            const otherPrice = parseFloat(document.getElementById('otherProductPrice').value) || 0;
+            total += otherPrice;
+        }
+        
+        document.getElementById('productTotal').value = total.toFixed(2);
+    }
+
+    function saveProductSelection() {
+        let total = 0;
+        
+        // 计算选中的标准产品价格
+        products.forEach((product, index) => {
+            const checkbox = document.getElementById(`product_${index}`);
+            if (checkbox && checkbox.checked) {
+                total += product.price;
+            }
+        });
+        
+        // 计算其他产品价格
+        const otherCheckbox = document.getElementById('product_24'); // 其他选项的索引
+        if (otherCheckbox && otherCheckbox.checked) {
+            const otherPrice = parseFloat(document.getElementById('otherProductPrice').value) || 0;
+            total += otherPrice;
+        }
+        
+        document.getElementById('productCost').value = total.toFixed(2);
+        autoCalc();
+        document.getElementById('productSelectModal').querySelector('.btn-close').click();
+    }
+
+    function formatNum(val) {
+        val = parseFloat(val) || 0;
+        return val.toFixed(2);
+    }
+
+    function wrapText32(text) {
+        if (!text) return '';
+        let res = '';
+        for (let i = 0; i < text.length; i += 32) {
+            res += text.slice(i, i + 32) + '\n';
+        }
+        return res.trim();
+    }
+
+    function initOwnerFilter() {
+        const sel = document.getElementById('ownerFilter');
+        sel.innerHTML = '<option value="">全部项目归属人</option>';
+        const owners = [...new Set(projectList.map(x => x.owner || ''))].filter(Boolean);
+        owners.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o;
+            opt.textContent = o;
+            sel.appendChild(opt);
+        });
+    }
+
+    function bindSearchEvents() {
+        document.getElementById('searchInput').addEventListener('input', e => {
+            searchKeyword = e.target.value.toLowerCase().trim();
+            currentPage = 1; renderTable(); renderPagination();
+        });
+        document.getElementById('ownerFilter').addEventListener('change', e => {
+            filterOwner = e.target.value;
+            currentPage = 1; renderTable(); renderPagination();
+        });
+    }
+
+    function getList() {
+        return projectList.filter(item => {
+            const matchText = Object.values(item).some(v =>
+                v != null && String(v).toLowerCase().includes(searchKeyword)
+            );
+            const matchOwner = !filterOwner || item.owner === filterOwner;
+            return matchText && matchOwner;
+        });
+    }
+
+    function autoCalc() {
+        const ca = parseFloat(document.getElementById('contractAmount').value) || 0;
+        const oc = parseFloat(document.getElementById('outCost').value) || 0;
+        const tax = (ca / 1.06 * 0.06 * 1.12) + (ca * 0.0003) - (oc / 1.06 * 0.06);
+        const tc = parseFloat(document.getElementById('travelCost').value) || 0;
+        const pc = parseFloat(document.getElementById('productCost').value) || 0;
+        const hc = parseFloat(document.getElementById('humanCost').value) || 0;
+        const fc = parseFloat(document.getElementById('floatCost').value) || 0;
+        const profit = ca - oc - tax - tc - pc - hc + fc;
+        const rate = ca > 0 ? (profit / ca * 100).toFixed(2) + '%' : '0.00%';
+
+        document.getElementById('tax').value = tax.toFixed(2);
+        document.getElementById('profit').value = profit.toFixed(2);
+        document.getElementById('profitRate').value = rate;
+    }
+
+    function openEditModal(index) {
+        const item = projectList[index];
+        document.getElementById('editIndex').value = index;
+        document.getElementById('sale').value = item.sale || '';
+        document.getElementById('contractCode').value = item.contractCode || '';
+        document.getElementById('clientName').value = item.clientName || '';
+        document.getElementById('projectName').value = item.projectName || '';
+        document.getElementById('contractAmount').value = formatNum(item.contractAmount);
+        document.getElementById('outCost').value = formatNum(item.outCost);
+        document.getElementById('tax').value = formatNum(item.tax);
+        document.getElementById('travelCost').value = formatNum(item.travelCost);
+        document.getElementById('productCost').value = formatNum(item.productCost);
+        document.getElementById('humanCost').value = formatNum(item.humanCost);
+        document.getElementById('floatCost').value = formatNum(item.floatCost);
+        document.getElementById('profit').value = formatNum(item.profit);
+        document.getElementById('profitRate').value = item.profitRate || '0.00%';
+        document.getElementById('checkForm').value = item.checkForm || '';
+        // 解析交付周期，提取数字部分
+        const deliveryCycleMatch = item.deliveryCycle ? item.deliveryCycle.match(/(\d+)/) : null;
+        document.getElementById('deliveryCycleDays').value = deliveryCycleMatch ? parseInt(deliveryCycleMatch[1]) : '';
+        document.getElementById('deliveryCycle').value = item.deliveryCycle || '';
+        document.getElementById('owner').value = item.owner || '';
+        document.getElementById('manager').value = item.manager || '';
+        // 解析激励比例，提取数字部分
+        const applyRateMatch = item.applyRate ? item.applyRate.match(/(\d+(?:\.\d+)?)/) : null;
+        document.getElementById('applyRateValue').value = applyRateMatch ? parseFloat(applyRateMatch[1]) : '';
+        document.getElementById('applyRate').value = item.applyRate || '';
+        
+        const auditRateMatch = item.auditRate ? item.auditRate.match(/(\d+(?:\.\d+)?)/) : null;
+        document.getElementById('auditRateValue').value = auditRateMatch ? parseFloat(auditRateMatch[1]) : '';
+        document.getElementById('auditRate').value = item.auditRate || '';
+        
+        document.getElementById('remark').value = item.remark || '';
+        
+        // 填充人天数据到人工成本计算弹窗
+        document.getElementById('juniorDays').value = item.juniorDays || 0;
+        document.getElementById('midDays').value = item.midDays || 0;
+        document.getElementById('seniorDays').value = item.seniorDays || 0;
+        
+        new bootstrap.Modal(document.getElementById('projectModal')).show();
+    }
+
+    function recalcAllTaxes() {
+        projectList.forEach(item => {
+            const ca = parseFloat(item.contractAmount) || 0;
+            const oc = parseFloat(item.outCost) || 0;
+            item.tax = parseFloat(((ca / 1.06 * 0.06 * 1.12) + (ca * 0.0003) - (oc / 1.06 * 0.06)).toFixed(2));
+            const tc = parseFloat(item.travelCost) || 0;
+            const pc = parseFloat(item.productCost) || 0;
+            const hc = parseFloat(item.humanCost) || 0;
+            const fc = parseFloat(item.floatCost) || 0;
+            item.profit = parseFloat((ca - oc - item.tax - tc - pc - hc + fc).toFixed(2));
+            item.profitRate = ca > 0 ? (item.profit / ca * 100).toFixed(2) + '%' : '0.00%';
+        });
+        localStorage.setItem('projectList', JSON.stringify(projectList));
+        renderTable();
+    }
+
+    function saveProject() {
+        const idx = document.getElementById('editIndex').value;
+        const data = {
+            sale: document.getElementById('sale').value,
+            contractCode: document.getElementById('contractCode').value,
+            clientName: document.getElementById('clientName').value,
+            projectName: document.getElementById('projectName').value,
+            contractAmount: formatNum(document.getElementById('contractAmount').value),
+            outCost: formatNum(document.getElementById('outCost').value),
+            tax: formatNum(document.getElementById('tax').value),
+            travelCost: formatNum(document.getElementById('travelCost').value),
+            productCost: formatNum(document.getElementById('productCost').value),
+            humanCost: formatNum(document.getElementById('humanCost').value),
+            juniorDays: parseFloat(document.getElementById('juniorDays').value) || 0,
+            midDays: parseFloat(document.getElementById('midDays').value) || 0,
+            seniorDays: parseFloat(document.getElementById('seniorDays').value) || 0,
+            floatCost: formatNum(document.getElementById('floatCost').value),
+            profit: formatNum(document.getElementById('profit').value),
+            profitRate: document.getElementById('profitRate').value,
+            checkForm: document.getElementById('checkForm').value,
+            deliveryCycle: document.getElementById('deliveryCycle').value,
+            owner: document.getElementById('owner').value,
+            manager: document.getElementById('manager').value,
+            applyRate: document.getElementById('applyRate').value,
+            auditRate: document.getElementById('auditRate').value,
+            remark: document.getElementById('remark').value
+        };
+        if (idx === '') projectList.push(data);
+        else projectList[idx] = data;
+        localStorage.setItem('projectList', JSON.stringify(projectList));
+        initOwnerFilter();
+        renderTable();
+        renderPagination();
+        bootstrap.Modal.getInstance(document.getElementById('projectModal')).hide();
+        alert('保存成功！');
+    }
+
+    function renderTable() {
+        const list = getList();
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        const start = (currentPage - 1) * pageSize;
+        const pageItems = list.slice(start, start + pageSize);
+
+        pageItems.forEach((item, i) => {
+            const tr = document.createElement('tr');
+            const idx = projectList.findIndex(x => x === item);
+            tr.innerHTML = `
+                <td>${start + i + 1}</td>
+                <td>${item.sale || ''}</td>
+                <td>${item.contractCode || ''}</td>
+                <td class="wrap-32">${wrapText32(item.clientName)}</td>
+                <td class="wrap-32">${wrapText32(item.projectName)}</td>
+                <td>${formatNum(item.contractAmount)}</td>
+                <td>${formatNum(item.outCost)}</td>
+                <td>${formatNum(item.tax)}</td>
+                <td>${formatNum(item.travelCost)}</td>
+                <td>${formatNum(item.productCost)}</td>
+                <td>${formatNum(item.humanCost)}</td>
+                <td>${formatNum(item.floatCost)}</td>
+                <td>${formatNum(item.profit)}</td>
+                <td>${item.profitRate || '0.00%'}</td>
+                <td>${item.checkForm || ''}</td>
+                <td>${item.deliveryCycle || ''}</td>
+                <td>${item.owner || ''}</td>
+                <td>${item.manager || ''}</td>
+                <td>${item.applyRate || ''}</td>
+                <td>${item.auditRate || ''}</td>
+                <td>${item.remark || ''}</td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="openEditModal(${idx})">编辑</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderPagination() {
+        const total = getList().length;
+        const wrap = document.getElementById('paginationWrapper');
+        const ul = document.getElementById('pagination');
+        ul.innerHTML = '';
+        if (total <= pageSize) { wrap.style.display = 'none'; return; }
+        wrap.style.display = 'flex';
+        const pages = Math.ceil(total / pageSize);
+
+        const prev = document.createElement('li');
+        prev.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+        prev.innerHTML = `<a class="page-link" href="#" onclick="goPage(${currentPage - 1})">上一页</a>`;
+        ul.appendChild(prev);
+
+        for (let i = 1; i <= pages; i++) {
+            const li = document.createElement('li');
+            li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+            li.innerHTML = `<a class="page-link" href="#" onclick="goPage(${i})">${i}</a>`;
+            ul.appendChild(li);
+        }
+
+        const next = document.createElement('li');
+        next.className = `page-item ${currentPage === pages ? 'disabled' : ''}`;
+        next.innerHTML = `<a class="page-link" href="#" onclick="goPage(${currentPage + 1})">下一页</a>`;
+        ul.appendChild(next);
+    }
+
+    function goPage(p) {
+        const total = Math.ceil(getList().length / pageSize);
+        if (p < 1 || p > total) return;
+        currentPage = p;
+        renderTable();
+        renderPagination();
+    }
+
+    function changePageSize() {
+        pageSize = +document.getElementById('pageSizeSelect').value;
+        currentPage = 1;
+        renderTable();
+        renderPagination();
+    }
+
+    function importExcel(e) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+            if (json.length < 2) { alert('Excel格式不正确'); return; }
+            const data = [];
+            for (let i = 1; i < json.length; i++) {
+                const r = json[i] || [];
+                data.push({
+                    sale: r[1] || '',
+                    contractCode: r[2] || '',
+                    clientName: r[3] || '',
+                    projectName: r[4] || '',
+                    contractAmount: formatNum(r[5]),
+                    outCost: formatNum(r[6]),
+                    tax: formatNum(r[7]),
+                    travelCost: formatNum(r[8]),
+                    productCost: formatNum(r[9]),
+                    humanCost: formatNum(r[10]),
+                    juniorDays: parseFloat(r[21]) || 0,
+                    midDays: parseFloat(r[22]) || 0,
+                    seniorDays: parseFloat(r[23]) || 0,
+                    floatCost: formatNum(r[11]),
+                    profit: formatNum(r[12]),
+                    profitRate: r[13] || '0.00%',
+                    checkForm: r[14] || '',
+                    deliveryCycle: r[15] || '',
+                    owner: r[16] || '',
+                    manager: r[17] || '',
+                    applyRate: r[18] || '',
+                    auditRate: r[19] || '',
+                    remark: r[20] || ''
+                });
+            }
+            projectList = data;
+            localStorage.setItem('projectList', JSON.stringify(projectList));
+            initOwnerFilter();
+            currentPage = 1;
+            renderTable();
+            renderPagination();
+            alert(`导入成功，共 ${data.length} 条`);
+            document.getElementById('excelFileInput').value = '';
+        };
+        reader.readAsArrayBuffer(e.target.files[0]);
+    }
+
+    function openHumanCostModal() {
+        // 保留之前填写的值，重新计算结果
+        const junior = parseFloat(document.getElementById('juniorDays').value) || 0;
+        const mid = parseFloat(document.getElementById('midDays').value) || 0;
+        const senior = parseFloat(document.getElementById('seniorDays').value) || 0;
+        const total = junior * 800 + mid * 1000 + senior * 1300;
+        document.getElementById('calcResult').value = total.toFixed(2);
+        new bootstrap.Modal(document.getElementById('humanCostModal')).show();
+    }
+
+    function saveHumanCost() {
+        const junior = parseFloat(document.getElementById('juniorDays').value) || 0;
+        const mid = parseFloat(document.getElementById('midDays').value) || 0;
+        const senior = parseFloat(document.getElementById('seniorDays').value) || 0;
+        const total = junior * 800 + mid * 1000 + senior * 1300;
+        document.getElementById('humanCost').value = total.toFixed(2);
+        autoCalc();
+        document.getElementById('humanCostModal').querySelector('.btn-close').click();
+    }
+
+    function exportExcel() {
+        const list = getList();
+        if (!list.length) { alert('暂无数据'); return; }
+        const headers = ["序号","销售","合同编号","甲方名称","项目名称","合同额","外采费用","项目税费","预估差旅费","标准产品费","计划人工成本","初级人天","中级人天","高级人天","浮动费用","预估利润","预估利润率","验收报告形式","交付上线周期","项目归属人","项目经理","申报激励比例","审核激励比例","备注"];
+        const body = list.map((item, i) => [
+            i+1, item.sale, item.contractCode, item.clientName, item.projectName,
+            formatNum(item.contractAmount), formatNum(item.outCost), formatNum(item.tax), formatNum(item.travelCost),
+            formatNum(item.productCost), formatNum(item.humanCost), item.juniorDays || 0, item.midDays || 0, item.seniorDays || 0,
+            formatNum(item.floatCost), formatNum(item.profit),
+            item.profitRate || '0.00%', item.checkForm, item.deliveryCycle, item.owner, item.manager,
+            item.applyRate, item.auditRate, item.remark
+        ]);
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...body]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "项目数据");
+        XLSX.writeFile(wb, "项目数据_" + new Date().getTime() + ".xlsx");
+    }
+</script>
+
+<!-- 人工成本计算弹窗 -->
+<div class="modal fade" id="humanCostModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">计算计划人工成本</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label small">初级人天</label>
+                        <input type="number" step="1" class="form-control form-control-sm" id="juniorDays" value="0" min="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">中级人天</label>
+                        <input type="number" step="1" class="form-control form-control-sm" id="midDays" value="0" min="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">高级人天</label>
+                        <input type="number" step="1" class="form-control form-control-sm" id="seniorDays" value="0" min="0">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">计算结果</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="calcResult" readonly>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="saveHumanCost()">确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 标准产品选择弹窗 -->
+<div class="modal fade" id="productSelectModal" tabindex="-1">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">选择标准产品</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label small">选择产品（可多选）</label>
+                        <div class="border p-2" id="productList">
+                            <!-- 产品选项会动态生成 -->
+                        </div>
+                    </div>
+                    <div class="col-12" id="otherProductSection" style="display: none;">
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label small">其他产品名称</label>
+                                <input type="text" class="form-control form-control-sm" id="otherProductName" oninput="updateProductTotal()">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small">价格</label>
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="otherProductPrice" oninput="updateProductTotal()">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">总价</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="productTotal" readonly>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="saveProductSelection()">确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
